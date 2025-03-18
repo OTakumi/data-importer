@@ -5,7 +5,7 @@ package repository
 import (
 	"context"
 
-	"mongodb-importer/internal/domain"
+	"github.com/OTakumi/data-importer/internal/domain"
 )
 
 // MockMongoRepository はMongoRepositoryのモック実装です
