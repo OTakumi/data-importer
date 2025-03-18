@@ -1,7 +1,7 @@
 # MongoDB JSON Importer Makefile
 
 # 変数定義
-BINARY_NAME=mongodb-importer
+BINARY_NAME=data-importer
 BUILD_DIR=./build
 MAIN_PATH=./cmd/importer
 DOCKER_COMPOSE=docker-compose
