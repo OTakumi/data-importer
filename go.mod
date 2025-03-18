@@ -1,4 +1,4 @@
-module mongodb-importer
+module github.com/OTakumi/data-importer
 
 go 1.22
 
