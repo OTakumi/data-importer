@@ -7,8 +7,8 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 
-	"mongodb-importer/internal/config"
-	"mongodb-importer/internal/domain"
+	"github.com/OTakumi/data-importer/internal/config"
+	"github.com/OTakumi/data-importer/internal/domain"
 )
 
 // Repository データアクセスのインターフェース
