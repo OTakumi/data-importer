@@ -43,7 +43,12 @@ build:
 # テスト実行
 .PHONY: test
 test:
-	$(GOTEST) -v ./...
+	$(GOTEST) -v ./internal/...
+
+# 統合テスト実行
+.PHONY: test-integration
+test-integration:
+	$(GOTEST) -v ./tests/integration
 
 # コードカバレッジレポート
 .PHONY: coverage
