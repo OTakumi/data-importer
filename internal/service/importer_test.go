@@ -3,8 +3,8 @@ package service
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
-	// "time"
 
 	"github.com/OTakumi/data-importer/internal/domain"
 	// "github.com/OTakumi/data-importer/internal/utils"
@@ -14,7 +14,7 @@ import (
 type MockFileUtils struct {
 	IsDirectoryFunc   func(path string) (bool, error)
 	FindJSONFilesFunc func(dirPath string) ([]string, error)
-	ParseJSONFileFunc func(filePath string) ([]map[string]interface{}, error)
+	ParseJSONFileFunc func(filePath string) ([]map[string]any, error)
 }
 
 // IsDirectory mocks the IsDirectory method
@@ -28,7 +28,7 @@ func (m *MockFileUtils) FindJSONFiles(dirPath string) ([]string, error) {
 }
 
 // ParseJSONFile mocks the ParseJSONFile method
-func (m *MockFileUtils) ParseJSONFile(filePath string) ([]map[string]interface{}, error) {
+func (m *MockFileUtils) ParseJSONFile(filePath string) ([]map[string]any, error) {
 	return m.ParseJSONFileFunc(filePath)
 }
 
@@ -68,8 +68,8 @@ func TestImportFile(t *testing.T) {
 			name:     "Successful import",
 			filePath: "/data/users.json",
 			mockFileUtils: &MockFileUtils{
-				ParseJSONFileFunc: func(filePath string) ([]map[string]interface{}, error) {
-					return []map[string]interface{}{
+				ParseJSONFileFunc: func(filePath string) ([]map[string]any, error) {
+					return []map[string]any{
 						{"name": "John", "age": 30},
 						{"name": "Jane", "age": 25},
 					}, nil
@@ -102,7 +102,7 @@ func TestImportFile(t *testing.T) {
 			name:     "Parse error",
 			filePath: "/data/invalid.json",
 			mockFileUtils: &MockFileUtils{
-				ParseJSONFileFunc: func(filePath string) ([]map[string]interface{}, error) {
+				ParseJSONFileFunc: func(filePath string) ([]map[string]any, error) {
 					return nil, errors.New("parse error")
 				},
 			},
@@ -124,8 +124,8 @@ func TestImportFile(t *testing.T) {
 			name:     "Database error",
 			filePath: "/data/users.json",
 			mockFileUtils: &MockFileUtils{
-				ParseJSONFileFunc: func(filePath string) ([]map[string]interface{}, error) {
-					return []map[string]interface{}{
+				ParseJSONFileFunc: func(filePath string) ([]map[string]any, error) {
+					return []map[string]any{
 						{"name": "John", "age": 30},
 					}, nil
 				},
@@ -202,14 +202,14 @@ func TestImportDirectory(t *testing.T) {
 				FindJSONFilesFunc: func(dirPath string) ([]string, error) {
 					return []string{"/data/users.json", "/data/products.json"}, nil
 				},
-				ParseJSONFileFunc: func(filePath string) ([]map[string]interface{}, error) {
+				ParseJSONFileFunc: func(filePath string) ([]map[string]any, error) {
 					if filePath == "/data/users.json" {
-						return []map[string]interface{}{
+						return []map[string]any{
 							{"name": "User1"},
 							{"name": "User2"},
 						}, nil
 					}
-					return []map[string]interface{}{
+					return []map[string]any{
 						{"id": 1, "name": "Product1"},
 						{"id": 2, "name": "Product2"},
 						{"id": 3, "name": "Product3"},
@@ -282,9 +282,9 @@ func TestImportDirectory(t *testing.T) {
 				FindJSONFilesFunc: func(dirPath string) ([]string, error) {
 					return []string{"/mixed/valid.json", "/mixed/invalid.json"}, nil
 				},
-				ParseJSONFileFunc: func(filePath string) ([]map[string]interface{}, error) {
+				ParseJSONFileFunc: func(filePath string) ([]map[string]any, error) {
 					if filePath == "/mixed/valid.json" {
-						return []map[string]interface{}{{"valid": true}}, nil
+						return []map[string]any{{"valid": true}}, nil
 					}
 					return nil, errors.New("parse error")
 				},
@@ -385,8 +385,8 @@ func TestImportPath(t *testing.T) {
 				IsDirectoryFunc: func(path string) (bool, error) {
 					return false, nil
 				},
-				ParseJSONFileFunc: func(filePath string) ([]map[string]interface{}, error) {
-					return []map[string]interface{}{{"name": "User1"}}, nil
+				ParseJSONFileFunc: func(filePath string) ([]map[string]any, error) {
+					return []map[string]any{{"name": "User1"}}, nil
 				},
 			},
 			mockRepo: &MockRepository{
@@ -411,8 +411,8 @@ func TestImportPath(t *testing.T) {
 				FindJSONFilesFunc: func(dirPath string) ([]string, error) {
 					return []string{"/data/file1.json"}, nil
 				},
-				ParseJSONFileFunc: func(filePath string) ([]map[string]interface{}, error) {
-					return []map[string]interface{}{{"key": "value"}}, nil
+				ParseJSONFileFunc: func(filePath string) ([]map[string]any, error) {
+					return []map[string]any{{"key": "value"}}, nil
 				},
 			},
 			mockRepo: &MockRepository{
@@ -565,6 +565,153 @@ func TestProcessBatches(t *testing.T) {
 			// Check count
 			if count != tt.expectedCount {
 				t.Errorf("Expected count %d, got %d", tt.expectedCount, count)
+			}
+		})
+	}
+}
+
+// TestCleanDocuments tests the cleanDocuments function
+func TestCleanDocuments(t *testing.T) {
+	// Create a basic importer instance for testing
+	importer := &MongoImporter{
+		removeIDField: true,
+	}
+
+	// Test cases
+	tests := []struct {
+		name          string
+		input         []domain.Document
+		expected      []domain.Document
+		removeIDField bool
+	}{
+		{
+			name: "Basic: Remove _id fields",
+			input: []domain.Document{
+				{
+					"_id":  map[string]any{"$oid": "67aea3a5369bca5b08f38a67"},
+					"name": "Test Document",
+					"age":  30,
+				},
+				{
+					"_id":    map[string]any{"$oid": "67aea3a5369bca5b08f38a68"},
+					"name":   "Another Document",
+					"active": true,
+				},
+			},
+			expected: []domain.Document{
+				{
+					"name": "Test Document",
+					"age":  30,
+				},
+				{
+					"name":   "Another Document",
+					"active": true,
+				},
+			},
+			removeIDField: true,
+		},
+		{
+			name: "Date Conversion: Convert $date fields",
+			input: []domain.Document{
+				{
+					"_id":        map[string]any{"$oid": "67aea3a5369bca5b08f38a67"},
+					"name":       "Document with dates",
+					"created_at": map[string]any{"$date": "2024-05-22T16:04:35.000Z"},
+					"updated_at": map[string]any{"$date": "2024-05-23T10:15:20.000Z"},
+				},
+			},
+			expected: []domain.Document{
+				{
+					"name":       "Document with dates",
+					"created_at": "2024-05-22T16:04:35.000Z",
+					"updated_at": "2024-05-23T10:15:20.000Z",
+				},
+			},
+			removeIDField: true,
+		},
+		{
+			name: "No Removal: When removeIDField is false",
+			input: []domain.Document{
+				{
+					"_id":  map[string]any{"$oid": "67aea3a5369bca5b08f38a67"},
+					"name": "Document with _id preserved",
+				},
+			},
+			expected: []domain.Document{
+				{
+					"_id":  map[string]any{"$oid": "67aea3a5369bca5b08f38a67"},
+					"name": "Document with _id preserved",
+				},
+			},
+			removeIDField: false,
+		},
+		{
+			name: "Complex Document: Multiple fields and types",
+			input: []domain.Document{
+				{
+					"_id":                map[string]any{"$oid": "67aea3a5369bca5b08f38a67"},
+					"user_id":            4,
+					"name":               "",
+					"business_form_type": "CORPORATION",
+					"tel":                "080-9966-0373",
+					"zip":                "1530064",
+					"created_at":         map[string]any{"$date": "2014-02-19T14:24:08.000Z"},
+					"updated_at":         map[string]any{"$date": "2024-05-22T16:04:35.000Z"},
+					"division_type":      nil,
+					"buyer_team_id":      4,
+				},
+			},
+			expected: []domain.Document{
+				{
+					"user_id":            4,
+					"name":               "",
+					"business_form_type": "CORPORATION",
+					"tel":                "080-9966-0373",
+					"zip":                "1530064",
+					"created_at":         "2014-02-19T14:24:08.000Z",
+					"updated_at":         "2024-05-22T16:04:35.000Z",
+					"division_type":      nil,
+					"buyer_team_id":      4,
+				},
+			},
+			removeIDField: true,
+		},
+		{
+			name:          "Empty Documents: Handle empty case gracefully",
+			input:         []domain.Document{},
+			expected:      []domain.Document{},
+			removeIDField: true,
+		},
+		{
+			name: "Documents Without ID: Should not change",
+			input: []domain.Document{
+				{
+					"name": "Document without _id",
+					"age":  25,
+				},
+			},
+			expected: []domain.Document{
+				{
+					"name": "Document without _id",
+					"age":  25,
+				},
+			},
+			removeIDField: true,
+		},
+	}
+
+	// Run test cases
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set the removeIDField flag for this test
+			importer.removeIDField = tt.removeIDField
+
+			// Call the function being tested
+			result := importer.cleanDocuments(tt.input)
+
+			// Check results
+			if !reflect.DeepEqual(result, tt.expected) {
+				t.Errorf("Expected %+v, got %+v", tt.expected, result)
 			}
 		})
 	}
