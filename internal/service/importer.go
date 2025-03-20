@@ -34,10 +34,11 @@ type DocumentRepository interface {
 
 // MongoImporter implements the ImporterService interface
 type MongoImporter struct {
-	fileUtils utils.FileUtilsInterface // For file operations (インターフェースに変更)
-	repo      DocumentRepository       // For MongoDB operations
-	batchSize int                      // Batch size for document imports
-	ctx       context.Context          // Context for database operations
+	fileUtils     utils.FileUtilsInterface // For file operations (インターフェースに変更)
+	repo          DocumentRepository       // For MongoDB operations
+	batchSize     int                      // Batch size for document imports
+	ctx           context.Context          // Context for database operations
+	removeIDField bool                     // Whether to remove _id fields during import
 }
 
 // NewMongoImporter creates a new MongoDB importer service
@@ -56,7 +57,7 @@ func NewMongoImporter(ctx context.Context, fileUtils utils.FileUtilsInterface, r
 }
 
 // ImportPath determines if the path is a file or directory and processes accordingly
-func (m *MongoImporter) ImportPath(path string) (interface{}, error) {
+func (m *MongoImporter) ImportPath(path string) (any, error) {
 	// Check if path is a directory or file
 	isDir, err := m.fileUtils.IsDirectory(path)
 	if err != nil {
@@ -91,6 +92,9 @@ func (m *MongoImporter) ImportFile(filePath string) (*domain.ImportResult, error
 		// Use direct conversion since domain.Document is a map type alias
 		domainDocs = append(domainDocs, domain.Document(doc))
 	}
+
+	// Clean documents by removing _id fields before import
+	domainDocs = m.cleanDocuments(domainDocs)
 
 	// Import documents in batches
 	count, err := m.processBatches(domainDocs, result.CollectionName)
@@ -167,4 +171,30 @@ func (m *MongoImporter) processBatches(documents []domain.Document, collectionNa
 	}
 
 	return result.InsertedCount, nil
+}
+
+// cleanDocuments removes _id fields from all documents to prevent MongoDB import errors
+func (m *MongoImporter) cleanDocuments(documents []domain.Document) []domain.Document {
+	// If removeIDField is false, return documents unchanged
+	if !m.removeIDField {
+		return documents
+	}
+
+	for i := range documents {
+		// Remove the _id field
+		delete(documents[i], "_id")
+
+		// Optional: Process date fields with $date format
+		for key, value := range documents[i] {
+			if valueMap, ok := value.(map[string]any); ok {
+				if dateStr, hasDate := valueMap["$date"]; hasDate {
+					// Convert $date format to a regular date string
+					if dateString, ok := dateStr.(string); ok {
+						documents[i][key] = dateString
+					}
+				}
+			}
+		}
+	}
+	return documents
 }
