@@ -30,7 +30,7 @@ func LoadEnv() error {
 	// as we'll fall back to OS environment variables
 	if err := godotenv.Load(envPath); err != nil {
 		// Just log or print the error for debugging, but continue
-		// fmt.Printf("No .env file found or error loading: %v\n", err)
+		fmt.Printf("No .env file found or error loading: %v\n", err)
 		return nil
 	}
 	return nil
@@ -82,8 +82,6 @@ func BuildMongoURI() string {
 			mongoURI = fmt.Sprintf("%s/?replicaSet=%s", mongoURI, replicaSet)
 		}
 	}
-
-	fmt.Println("MongoURI: ", mongoURI)
 
 	return mongoURI
 }
