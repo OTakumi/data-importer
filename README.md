@@ -1,13 +1,126 @@
-# MongoDB JSON Importer
+# MongoDB JSONインポーター
 
-GoでJSONファイルからMongoDBへデータをインポートするプログラムです。ファイル単体とディレクトリ両方に対応しています。
+JSONファイルからMongoDBへデータを効率的にインポートするためのGoツールです。ファイル単位またはディレクトリ単位の処理に対応し、大量データのバッチ処理を行うことができます。
 
 ## 機能
 
 - 単一のJSONファイルからMongoDBコレクションへのインポート
 - ディレクトリ内の複数のJSONファイルを再帰的に処理
-- コレクション名はファイル名から自動的に設定
-- Dockerを使用したローカル環境での実行
+- ファイル名をコレクション名として自動設定
+- 配列形式の複数ドキュメントと単一オブジェクト形式の両方に対応
+- ドキュメントのバッチ処理による効率的なインポート
+- 環境変数または.envファイルによる柔軟な設定
+- Docker環境での簡単な実行
+
+## 必要条件
+
+- Go 1.20以上
+- MongoDB (ローカルまたはリモート)
+- Docker および Docker Compose (オプション)
+
+## インストール
+
+```bash
+# リポジトリのクローン
+git clone https://github.com/OTakumi/data-importer.git
+cd data-importer
+
+# ビルド
+make build
+```
+
+## 使い方
+
+### コマンドライン
+
+```bash
+# 単一のJSONファイルをインポート
+./mongodb-importer path/to/file.json
+
+# ディレクトリ内のすべてのJSONファイルをインポート
+./mongodb-importer path/to/directory
+
+# カスタム環境設定ファイルを使用
+./mongodb-importer -env=custom.env path/to/file.json
+
+# ヘルプを表示
+./mongodb-importer --help
+```
+
+### Docker環境での実行
+
+```bash
+# ビルドして実行
+make docker-build
+make docker-up
+
+# JSONファイルをインポート
+make import-file file=path/to/file.json
+
+# ディレクトリをインポート
+make import-dir dir=path/to/directory
+
+# 停止
+make docker-down
+```
+
+## 環境設定
+
+環境変数または.envファイルを使用して設定をカスタマイズできます。
+
+### 環境変数
+
+#### MongoDB接続設定（オプション1：個別コンポーネント）
+- `MONGODB_USERNAME`: MongoDBのユーザー名
+- `MONGODB_PASSWORD`: MongoDBのパスワード
+- `MONGODB_HOST`: MongoDBのホスト名（デフォルト: "mongodb"）
+- `MONGODB_PORT`: MongoDBのポート番号（デフォルト: "27017"）
+- `MONGODB_AUTH_DATABASE`: 認証用データベース名（オプション）
+- `MONGODB_REPLICA_SET`: レプリカセット名（オプション）
+
+#### MongoDB接続設定（オプション2：URIを直接指定）
+- `MONGODB_URI`: MongoDB接続URI（デフォルト: `mongodb://mongodb:27017`）
+- `MONGODB_DATABASE`: 使用するデータベース名（デフォルト: `test_db`）
+
+#### アプリケーション設定
+- `MONGODB_TIMEOUT`: タイムアウト秒数（デフォルト: `10`）
+- `MONGODB_BATCH_SIZE`: バッチサイズ（デフォルト: `1000`）
+
+### .envファイル
+
+以下のような.envファイルを作成することで、環境変数の設定が可能です：
+
+```
+# MongoDB接続設定（オプション1：個別コンポーネント）
+MONGODB_USERNAME=admin
+MONGODB_PASSWORD=password123
+MONGODB_HOST=localhost
+MONGODB_PORT=27017
+MONGODB_AUTH_DATABASE=admin
+
+# MongoDB接続設定（オプション2：URIを直接指定）
+#MONGODB_URI=mongodb://admin:password123@localhost:27017/?authSource=admin
+
+# データベースと設定
+MONGODB_DATABASE=import_db
+MONGODB_TIMEOUT=30
+MONGODB_BATCH_SIZE=500
+```
+
+## テスト
+
+```bash
+# すべてのテストを実行
+make test
+
+# 統合テストを実行
+make integration-test
+
+# カバレッジレポートを生成
+make coverage
+```
+
+統合テストを実行する場合は、`.env.test`ファイルを作成するか、環境変数を設定してください。詳細は[統合テストのREADME](tests/integration/README.md)を参照してください。
 
 ## プロジェクト構造
 
@@ -15,84 +128,56 @@ GoでJSONファイルからMongoDBへデータをインポートするプログ�
 mongodb-importer/
 ├── cmd/
 │   └── importer/
-│       └── main.go       # エントリーポイント
+│       └── main.go              # エントリーポイント
 ├── internal/
 │   ├── config/
-│   │   └── config.go     # 設定管理
+│   │   └── config.go            # 設定管理
 │   ├── domain/
-│   │   └── models.go     # ドメインモデル
+│   │   └── models.go            # ドメインモデル
 │   ├── repository/
-│   │   └── mongodb.go    # データアクセス層
+│   │   └── mongodb.go           # データアクセス層
 │   ├── service/
-│   │   └── importer.go   # ビジネスロジック層
+│   │   └── importer.go          # ビジネスロジック層
 │   └── utils/
-│       └── fileutils.go  # ファイル操作ユーティリティ
+│       └── fileutils.go         # ファイル操作ユーティリティ
+├── tests/
+│   ├── integration/             # 統合テスト
+│   └── testdata/                # テスト用データファイル
 ├── Dockerfile
 ├── docker-compose.yaml
-├── go.mod
+├── .env.sample                  # 環境変数設定サンプル
+├── Makefile
 └── README.md
 ```
 
-## 必要条件
+## 今後の開発計画
 
-- Go 1.20以上
-- Docker および Docker Compose
+### 短期的な改善点
+1. **ストリーミング処理の実装**
+   - 巨大JSONファイルのメモリ効率を向上
+   - JSONストリーミングパーサーの導入
 
-## セットアップと実行方法
+2. **並列処理の最適化**
+   - 複数ファイルの並列処理効率の向上
+   - リソース使用量の最適化
 
-### 1. リポジトリのクローン
+3. **詳細な進捗表示**
+   - リアルタイム進捗バーの実装
+   - 処理速度や統計情報の表示
 
-```bash
-git clone <リポジトリURL>
-cd mongodb-importer
-```
+### 中長期的な拡張計画
+1. **データ変換機能**
+   - JSONスキーマの変換機能
+   - フィールド名やデータ型の変換
 
-### 2. サンプルデータの準備
+2. **他のデータソースへの対応**
+   - CSV、XML、YAMLなど他の形式への対応
+   - さまざまなデータベースへのエクスポート機能
 
-`data`ディレクトリを作成し、JSONファイルを配置します：
+3. **GUIインターフェースの追加**
+   - ウェブベースの管理インターフェース
+   - ドラッグアンドドロップによるファイル操作
 
-```bash
-mkdir -p data
-# サンプルJSONファイルをdata/users.jsonとして保存
-```
+## ライセンス
 
-### 3. Docker Composeで実行
-
-```bash
-docker-compose up --build
-```
-
-### 4. 手動実行（オプション）
-
-```bash
-# MongoDBコンテナが実行中であることを確認
-docker-compose up -d mongodb
-
-# 特定のJSONファイルを指定して実行
-docker-compose run --rm mongodb-importer /data/users.json
-
-# ディレクトリを指定して実行（/data内のすべてのJSONファイルが処理されます）
-docker-compose run --rm mongodb-importer /data
-```
-
-## 環境変数
-
-以下の環境変数を使って設定をカスタマイズできます：
-
-- `MONGODB_URI`: MongoDB接続URI (デフォルト: `mongodb://mongodb:27017`)
-- `MONGODB_DATABASE`: 使用するデータベース名 (デフォルト: `test_db`)
-
-## 拡張方法
-
-各レイヤーは適切に分離されているため、機能の追加や変更が容易です：
-
-1. **設定の追加**: `config/config.go` を変更
-2. **新しいリポジトリの追加**: `repository/` に新しいファイルを追加
-3. **ビジネスロジックの拡張**: `service/` に機能を追加
-4. **ユーティリティの拡張**: `utils/` に汎用的な関数を追加
-
-## 注意事項
-
-- JSONファイルは配列形式（複数のドキュメント）または単一オブジェクト形式に対応しています。
-- 既存のコレクションにデータを追加する形で動作します（上書きはされません）。
-- エラーが発生しても処理は継続され、エラーはログに記録されます。
+[MIT License](LICENSE)
