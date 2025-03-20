@@ -13,61 +13,69 @@ import (
 	"github.com/OTakumi/data-importer/internal/utils"
 )
 
-// TestIntegration は統合テストを実行する
-// このテストは実際のMongoDBに接続するため、環境変数で設定されたMongoDBが利用可能である必要がある
-// テスト実行前に以下のコマンドでDockerコンテナを起動しておくことを推奨:
-// $ docker-compose up -d mongodb
+// TestIntegration is an integration test that tests the full import process
+// This test requires a MongoDB instance to be available
+// You can configure the MongoDB connection by setting environment variables or creating a .env.test file
 func TestIntegration(t *testing.T) {
-	// テスト環境のチェック
-	// テスト用のMongoDBが利用可能かどうかを確認
-	mongoURI := os.Getenv("MONGODB_URI")
-	if mongoURI == "" {
-		mongoURI = "mongodb://localhost:27017" // デフォルト値
+	// Load test specific .env file if it exists
+	testEnvFilePath := ".env.test"
+	if _, err := os.Stat(testEnvFilePath); err == nil {
+		os.Setenv("DOTENV_PATH", testEnvFilePath)
 	}
 
-	// テストデータのパスを設定
-	testDataDir := "../testdata"
+	// For CI/CD environments, allow setting a test-specific MongoDB URI
+	// if testURI := os.Getenv("TEST_MONGODB_URI"); testURI != "" {
+	// 	os.Setenv("MONGODB_URI", testURI)
+	// }
+
+	// Get test data paths
+	testDataDir := findTestDataDir(t)
 	usersArrayPath := filepath.Join(testDataDir, "users_array.json")
 	productObjectPath := filepath.Join(testDataDir, "product_object.json")
 	invalidJSONPath := filepath.Join(testDataDir, "invalid.json")
 
-	// テストデータファイルが存在するか確認
+	// Verify that test data files exist
 	if _, err := os.Stat(usersArrayPath); os.IsNotExist(err) {
-		t.Skipf("テストデータファイル %s が見つかりません。テストをスキップします。", usersArrayPath)
+		t.Skipf("Test data file %s not found. Skipping test.", usersArrayPath)
 	}
 	if _, err := os.Stat(productObjectPath); os.IsNotExist(err) {
-		t.Skipf("テストデータファイル %s が見つかりません。テストをスキップします。", productObjectPath)
+		t.Skipf("Test data file %s not found. Skipping test.", productObjectPath)
 	}
 
-	// コンテキストの作成（タイムアウト付き）
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// Initialize config (this will load from .env.test or environment variables)
+	cfg := config.NewConfig()
+
+	// Override database name for tests to avoid affecting production data
+	testDBName := "test_db_integration"
+	if os.Getenv("TEST_MONGODB_DATABASE") != "" {
+		testDBName = os.Getenv("TEST_MONGODB_DATABASE")
+	}
+	cfg.DatabaseName = testDBName
+
+	t.Logf("Using MongoDB URI: %s, Database: %s", cfg.MongoURI, cfg.DatabaseName)
+
+	// Create context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.TimeoutSeconds)*time.Second)
 	defer cancel()
 
-	// 設定の初期化
-	cfg := &config.Config{
-		MongoURI:       mongoURI,
-		DatabaseName:   "test_db_integration",
-		TimeoutSeconds: 30,
-	}
-
-	// MongoDBリポジトリの初期化
+	// Initialize MongoDB repository
 	repo, err := repository.NewMongoRepository(ctx, cfg)
 	if err != nil {
-		t.Fatalf("MongoDBへの接続に失敗しました: %v", err)
+		t.Fatalf("Failed to connect to MongoDB: %v", err)
 	}
 	defer func() {
 		if err := repo.Disconnect(context.Background()); err != nil {
-			t.Logf("MongoDBの切断中にエラーが発生しました: %v", err)
+			t.Logf("Error disconnecting from MongoDB: %v", err)
 		}
 	}()
 
-	// ファイルユーティリティの初期化
-	fileUtils := utils.NewFileUtils(nil) // 実際のファイルシステムを使用
+	// Initialize file utilities
+	fileUtils := utils.NewFileUtils(nil) // Use actual file system
 
-	// インポータサービスの初期化
-	importer := service.NewMongoImporter(ctx, fileUtils, repo, 100) // テスト用に小さめのバッチサイズ
+	// Initialize importer service with batch size from config
+	importer := service.NewMongoImporter(ctx, fileUtils, repo, cfg.BatchSize)
 
-	// サブテストの実行
+	// Run subtests
 	t.Run("ImportArrayJSON", func(t *testing.T) {
 		testImportArrayJSON(t, importer, usersArrayPath)
 	})
@@ -85,56 +93,87 @@ func TestIntegration(t *testing.T) {
 	})
 }
 
-// testImportArrayJSON は配列形式のJSONファイルのインポートをテストする
+// findTestDataDir searches for the testdata directory
+func findTestDataDir(t *testing.T) string {
+	// Try different possible locations for the test data
+	possiblePaths := []string{
+		"testdata",          // If run from project root
+		"../../testdata",    // If run from tests/integration
+		"../testdata",       // If run from tests
+		"../../../testdata", // Other possible location
+	}
+
+	for _, path := range possiblePaths {
+		if _, err := os.Stat(path); err == nil {
+			absPath, _ := filepath.Abs(path)
+			t.Logf("Found test data directory: %s", absPath)
+			return path
+		}
+	}
+
+	// If testdata directory is not found, create a temporary one
+	tempDir, err := os.MkdirTemp("", "testdata-*")
+	if err != nil {
+		t.Fatalf("Failed to create temporary test data directory: %v", err)
+	}
+	t.Logf("Created temporary test data directory: %s", tempDir)
+
+	// This is not ideal, but allows tests to continue
+	// In a real scenario, you would populate this directory with test files
+	t.Logf("Warning: Using temporary test data directory. Tests may be skipped.")
+	return tempDir
+}
+
+// testImportArrayJSON tests importing an array format JSON file
 func testImportArrayJSON(t *testing.T, importer *service.MongoImporter, filePath string) {
 	result, err := importer.ImportFile(filePath)
 	if err != nil {
-		t.Fatalf("配列JSONのインポートに失敗しました: %v", err)
+		t.Fatalf("Failed to import array JSON: %v", err)
 	}
 
 	if result.InsertedCount <= 0 {
-		t.Errorf("ドキュメントが挿入されませんでした: %+v", result)
+		t.Errorf("No documents were inserted: %+v", result)
 	}
 
-	t.Logf("配列JSONのインポート結果: %d件のドキュメントが挿入されました (コレクション: %s)",
+	t.Logf("Array JSON import result: %d documents inserted (collection: %s)",
 		result.InsertedCount, result.CollectionName)
 }
 
-// testImportObjectJSON は単一オブジェクト形式のJSONファイルのインポートをテストする
+// testImportObjectJSON tests importing a single object JSON file
 func testImportObjectJSON(t *testing.T, importer *service.MongoImporter, filePath string) {
 	result, err := importer.ImportFile(filePath)
 	if err != nil {
-		t.Fatalf("オブジェクトJSONのインポートに失敗しました: %v", err)
+		t.Fatalf("Failed to import object JSON: %v", err)
 	}
 
 	if result.InsertedCount != 1 {
-		t.Errorf("期待される挿入件数は1件ですが、%d件が挿入されました: %+v",
+		t.Errorf("Expected 1 document to be inserted, but got %d: %+v",
 			result.InsertedCount, result)
 	}
 
-	t.Logf("オブジェクトJSONのインポート結果: %d件のドキュメントが挿入されました (コレクション: %s)",
+	t.Logf("Object JSON import result: %d documents inserted (collection: %s)",
 		result.InsertedCount, result.CollectionName)
 }
 
-// testImportInvalidJSON は不正なJSONファイルのインポートをテストする
+// testImportInvalidJSON tests importing an invalid JSON file
 func testImportInvalidJSON(t *testing.T, importer *service.MongoImporter, filePath string) {
 	result, err := importer.ImportFile(filePath)
 	if err == nil {
-		t.Errorf("不正なJSONファイルのインポートが成功してしまいました: %+v", result)
+		t.Errorf("Import of invalid JSON file succeeded unexpectedly: %+v", result)
 	}
 
-	t.Logf("不正なJSONファイルのインポートは想定通り失敗しました: %v", err)
+	t.Logf("Invalid JSON file import failed as expected: %v", err)
 }
 
-// testImportDirectory はディレクトリのインポートをテストする
+// testImportDirectory tests importing a directory
 func testImportDirectory(t *testing.T, importer *service.MongoImporter, dirPath string) {
 	results, err := importer.ImportDirectory(dirPath)
 	if err != nil {
-		// エラーが発生することは想定内（不正なJSONファイルが含まれているため）
-		t.Logf("ディレクトリインポートで部分的なエラーが発生しました: %v", err)
+		// Errors are expected (invalid JSON file is included)
+		t.Logf("Directory import had partial errors: %v", err)
 	}
 
-	// 結果の確認
+	// Check results
 	var successCount, errorCount int
 	for _, result := range results {
 		if result.Error == nil {
@@ -144,11 +183,11 @@ func testImportDirectory(t *testing.T, importer *service.MongoImporter, dirPath 
 		}
 	}
 
-	t.Logf("ディレクトリインポート結果: %d件成功, %d件失敗, 合計%d件のファイル",
+	t.Logf("Directory import results: %d succeeded, %d failed, total %d files",
 		successCount, errorCount, len(results))
 
-	// 少なくとも1つの成功があるか確認
+	// Ensure at least one success
 	if successCount == 0 {
-		t.Errorf("ディレクトリインポートで1件も成功していません")
+		t.Errorf("No files were successfully imported in directory import")
 	}
 }
