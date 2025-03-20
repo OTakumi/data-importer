@@ -167,3 +167,98 @@ MONGODB_BATCH_SIZE=250
 	os.Unsetenv("MONGODB_TIMEOUT")
 	os.Unsetenv("MONGODB_BATCH_SIZE")
 }
+
+func TestBuildMongoURI(t *testing.T) {
+	// Clear all MongoDB related environment variables first
+	os.Unsetenv("MONGODB_URI")
+	os.Unsetenv("MONGODB_USERNAME")
+	os.Unsetenv("MONGODB_PASSWORD")
+	os.Unsetenv("MONGODB_HOST")
+	os.Unsetenv("MONGODB_PORT")
+	os.Unsetenv("MONGODB_AUTH_DATABASE")
+	os.Unsetenv("MONGODB_REPLICA_SET")
+
+	// Test 1: Default values (no environment variables set)
+	uri := BuildMongoURI()
+	expected := "mongodb://mongodb:27017"
+	if uri != expected {
+		t.Errorf("Expected URI '%s', got '%s'", expected, uri)
+	}
+
+	// Test 2: Custom host and port
+	os.Setenv("MONGODB_HOST", "custom-host")
+	os.Setenv("MONGODB_PORT", "12345")
+	uri = BuildMongoURI()
+	expected = "mongodb://custom-host:12345"
+	if uri != expected {
+		t.Errorf("Expected URI '%s', got '%s'", expected, uri)
+	}
+
+	// Test 3: With username and password
+	os.Setenv("MONGODB_USERNAME", "testuser")
+	os.Setenv("MONGODB_PASSWORD", "testpass")
+	uri = BuildMongoURI()
+	expected = "mongodb://testuser:testpass@custom-host:12345"
+	if uri != expected {
+		t.Errorf("Expected URI '%s', got '%s'", expected, uri)
+	}
+
+	// Test 4: With special characters in password
+	os.Setenv("MONGODB_PASSWORD", "test@pass:123")
+	uri = BuildMongoURI()
+	expected = "mongodb://testuser:test%40pass%3A123@custom-host:12345"
+	if uri != expected {
+		t.Errorf("Expected URI '%s', got '%s'", expected, uri)
+	}
+
+	// Test 5: With authentication database
+	os.Setenv("MONGODB_PASSWORD", "testpass") // Reset to simple password
+	os.Setenv("MONGODB_AUTH_DATABASE", "admin")
+	uri = BuildMongoURI()
+	expected = "mongodb://testuser:testpass@custom-host:12345/?authSource=admin"
+	if uri != expected {
+		t.Errorf("Expected URI '%s', got '%s'", expected, uri)
+	}
+
+	// Test 6: With replica set
+	os.Setenv("MONGODB_REPLICA_SET", "rs0")
+	uri = BuildMongoURI()
+	expected = "mongodb://testuser:testpass@custom-host:12345/?authSource=admin&replicaSet=rs0"
+	if uri != expected {
+		t.Errorf("Expected URI '%s', got '%s'", expected, uri)
+	}
+
+	// Test 7: Just replica set (no auth db)
+	os.Unsetenv("MONGODB_AUTH_DATABASE")
+	uri = BuildMongoURI()
+	expected = "mongodb://testuser:testpass@custom-host:12345/?replicaSet=rs0"
+	if uri != expected {
+		t.Errorf("Expected URI '%s', got '%s'", expected, uri)
+	}
+
+	// Test 8: Username without password
+	os.Unsetenv("MONGODB_PASSWORD")
+	os.Unsetenv("MONGODB_REPLICA_SET")
+	uri = BuildMongoURI()
+	expected = "mongodb://testuser@custom-host:12345"
+	if uri != expected {
+		t.Errorf("Expected URI '%s', got '%s'", expected, uri)
+	}
+
+	// Test 9: Full URI takes precedence
+	os.Setenv("MONGODB_URI", "mongodb://direct-uri:27017")
+	uri = BuildMongoURI()
+	expected = "mongodb://direct-uri:27017"
+	if uri != expected {
+		t.Errorf("Expected URI '%s', got '%s'", expected, uri)
+	}
+
+	// Clean up
+	os.Unsetenv("MONGODB_URI")
+	os.Unsetenv("MONGODB_USERNAME")
+	os.Unsetenv("MONGODB_PASSWORD")
+	os.Unsetenv("MONGODB_HOST")
+	os.Unsetenv("MONGODB_PORT")
+	os.Unsetenv("MONGODB_AUTH_DATABASE")
+	os.Unsetenv("MONGODB_REPLICA_SET")
+}
