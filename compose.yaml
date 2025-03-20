@@ -1,0 +1,12 @@
+services:
+  mongo:
+    image: mongo
+    restart: always
+    container_name: data_importer_mongo
+    ports:
+      - 27017:27017
+    env_file:
+      - .env
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGODB_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_PASSWORD}
