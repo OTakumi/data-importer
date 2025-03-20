@@ -19,14 +19,21 @@ import (
 func main() {
 	// Parse command line arguments
 	var showHelp bool
+	var envFile string
 	flag.BoolVar(&showHelp, "help", false, "Show usage information")
 	flag.BoolVar(&showHelp, "h", false, "Show usage information (shorthand)")
+	flag.StringVar(&envFile, "env", ".env", "Path to .env file")
 	flag.Parse()
 
 	// Display help
 	if showHelp || flag.NArg() == 0 {
 		printUsage()
 		os.Exit(0)
+	}
+
+	// Set the env file path to use
+	if envFile != ".env" {
+		os.Setenv("DOTENV_PATH", envFile)
 	}
 
 	// Get the first argument as import path
@@ -64,11 +71,12 @@ func main() {
 	fileUtils := utils.NewFileUtils(nil) // Use actual file system
 
 	// Initialize importer service
-	importer := service.NewMongoImporter(ctx, fileUtils, repo, 1000) // Batch size of 1000
+	importer := service.NewMongoImporter(ctx, fileUtils, repo, cfg.BatchSize)
 
 	// Execute import process
 	startTime := time.Now()
 	fmt.Printf("Starting import: %s\n", importPath)
+	fmt.Printf("Using MongoDB: %s, Database: %s\n", cfg.MongoURI, cfg.DatabaseName)
 
 	result, err := importer.ImportPath(importPath)
 	if err != nil {
@@ -85,9 +93,11 @@ func printUsage() {
 	fmt.Println("Usage: importer [options] <file-path or directory-path>")
 	fmt.Println("\nOptions:")
 	flag.PrintDefaults()
-	fmt.Println("\nEnvironment Variables:")
-	fmt.Println("  MONGODB_URI       - MongoDB connection URI (default: mongodb://mongodb:27017)")
-	fmt.Println("  MONGODB_DATABASE  - Database name (default: test_db)")
+	fmt.Println("\nEnvironment Variables (can be set in .env file):")
+	fmt.Println("  MONGODB_URI        - MongoDB connection URI (default: mongodb://mongodb:27017)")
+	fmt.Println("  MONGODB_DATABASE   - Database name (default: test_db)")
+	fmt.Println("  MONGODB_TIMEOUT    - Timeout in seconds (default: 10)")
+	fmt.Println("  MONGODB_BATCH_SIZE - Batch size for imports (default: 1000)")
 }
 
 // displayResults displays the results of the import process
