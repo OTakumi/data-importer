@@ -10,6 +10,8 @@ JSONファイルからMongoDBへデータを効率的にインポートするた
 - 配列形式の複数ドキュメントと単一オブジェクト形式の両方に対応
 - ドキュメントのバッチ処理による効率的なインポート
 - 環境変数または.envファイルによる柔軟な設定
+- MongoDB固有の_idフィールドを自動的に除去してインポートエラーを防止
+- $date形式の日付フィールドを標準形式に変換
 - Docker環境での簡単な実行
 
 ## 必要条件
@@ -35,16 +37,16 @@ make build
 
 ```bash
 # 単一のJSONファイルをインポート
-./mongodb-importer path/to/file.json
+./data-importer path/to/file.json
 
 # ディレクトリ内のすべてのJSONファイルをインポート
-./mongodb-importer path/to/directory
+./data-importer path/to/directory
 
 # カスタム環境設定ファイルを使用
-./mongodb-importer -env=custom.env path/to/file.json
+./data-importer -env=custom.env path/to/file.json
 
 # ヘルプを表示
-./mongodb-importer --help
+./data-importer --help
 ```
 
 ### Docker環境での実行
@@ -125,7 +127,7 @@ make coverage
 ## プロジェクト構造
 
 ```
-mongodb-importer/
+data-importer/
 ├── cmd/
 │   └── importer/
 │       └── main.go              # エントリーポイント
