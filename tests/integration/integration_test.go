@@ -73,7 +73,7 @@ func TestIntegration(t *testing.T) {
 	fileUtils := utils.NewFileUtils(nil) // Use actual file system
 
 	// Initialize importer service with batch size from config
-	importer := service.NewMongoImporter(ctx, fileUtils, repo, cfg.BatchSize)
+	importer := service.NewMongoImporterWithOptions(ctx, fileUtils, repo, cfg.BatchSize, true)
 
 	// Run subtests
 	t.Run("ImportArrayJSON", func(t *testing.T) {
