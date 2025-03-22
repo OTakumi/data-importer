@@ -149,7 +149,7 @@ func TestImportFile(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create importer with mocks
-			importer := NewMongoImporter(ctx, tt.mockFileUtils, tt.mockRepo, 100)
+			importer := NewMongoImporterWithOptions(ctx, tt.mockFileUtils, tt.mockRepo, 100, false)
 
 			// Call the method
 			result, err := importer.ImportFile(tt.filePath)
@@ -320,7 +320,7 @@ func TestImportDirectory(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create importer with mocks
-			importer := NewMongoImporter(ctx, tt.mockFileUtils, tt.mockRepo, 100)
+			importer := NewMongoImporterWithOptions(ctx, tt.mockFileUtils, tt.mockRepo, 100, false)
 
 			// Call the method
 			results, err := importer.ImportDirectory(tt.dirPath)
@@ -445,7 +445,7 @@ func TestImportPath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create importer with mocks
-			importer := NewMongoImporter(ctx, tt.mockFileUtils, tt.mockRepo, 100)
+			importer := NewMongoImporterWithOptions(ctx, tt.mockFileUtils, tt.mockRepo, 100, false)
 
 			// Call the method
 			result, err := importer.ImportPath(tt.path)
@@ -549,7 +549,7 @@ func TestProcessBatches(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create importer with mocks
-			importer := NewMongoImporter(ctx, &MockFileUtils{}, tt.mockRepo, tt.batchSize)
+			importer := NewMongoImporterWithOptions(ctx, &MockFileUtils{}, tt.mockRepo, tt.batchSize, false)
 
 			// Call the method directly (it's private, but we can access it in tests)
 			count, err := importer.processBatches(tt.documents, "test_collection")

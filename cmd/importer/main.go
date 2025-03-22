@@ -71,7 +71,7 @@ func main() {
 	fileUtils := utils.NewFileUtils(nil) // Use actual file system
 
 	// Initialize importer service
-	importer := service.NewMongoImporter(ctx, fileUtils, repo, cfg.BatchSize)
+	importer := service.NewMongoImporterWithOptions(ctx, fileUtils, repo, cfg.BatchSize, true)
 
 	// Execute import process
 	startTime := time.Now()

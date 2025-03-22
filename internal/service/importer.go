@@ -20,7 +20,7 @@ type ImporterService interface {
 	ImportDirectory(dirPath string) ([]*domain.ImportResult, error)
 
 	// ImportPath determines if the path is a file or directory and processes accordingly
-	ImportPath(path string) (interface{}, error)
+	ImportPath(path string) (any, error)
 }
 
 // DocumentRepository defines the interface for MongoDB operations
@@ -42,17 +42,18 @@ type MongoImporter struct {
 }
 
 // NewMongoImporter creates a new MongoDB importer service
-func NewMongoImporter(ctx context.Context, fileUtils utils.FileUtilsInterface, repo DocumentRepository, batchSize int) *MongoImporter {
+func NewMongoImporterWithOptions(ctx context.Context, fileUtils utils.FileUtilsInterface, repo DocumentRepository, batchSize int, removeIDField bool) *MongoImporter {
 	// Use a reasonable default batch size if not specified
 	if batchSize <= 0 {
 		batchSize = 1000
 	}
 
 	return &MongoImporter{
-		fileUtils: fileUtils,
-		repo:      repo,
-		batchSize: batchSize,
-		ctx:       ctx,
+		fileUtils:     fileUtils,
+		repo:          repo,
+		batchSize:     batchSize,
+		ctx:           ctx,
+		removeIDField: removeIDField,
 	}
 }
 
@@ -175,26 +176,47 @@ func (m *MongoImporter) processBatches(documents []domain.Document, collectionNa
 
 // cleanDocuments removes _id fields from all documents to prevent MongoDB import errors
 func (m *MongoImporter) cleanDocuments(documents []domain.Document) []domain.Document {
-	// If removeIDField is false, return documents unchanged
 	if !m.removeIDField {
 		return documents
 	}
 
+	idCount := 0
 	for i := range documents {
-		// Remove the _id field
-		delete(documents[i], "_id")
+		if _, hasID := documents[i]["_id"]; hasID {
+			idCount++
 
-		// Optional: Process date fields with $date format
+			// _idの種類も確認
+			fmt.Printf("Document %d has _id of type %T: %v\n",
+				i, documents[i]["_id"], documents[i]["_id"])
+
+			delete(documents[i], "_id")
+
+			// 削除後に確認
+			if _, stillHasID := documents[i]["_id"]; stillHasID {
+				fmt.Printf("WARNING: Document %d still has _id after deletion!\n", i)
+			}
+		}
+
+		// Convert to string from date type
 		for key, value := range documents[i] {
-			if valueMap, ok := value.(map[string]any); ok {
-				if dateStr, hasDate := valueMap["$date"]; hasDate {
-					// Convert $date format to a regular date string
-					if dateString, ok := dateStr.(string); ok {
-						documents[i][key] = dateString
+			if value, ok := value.(map[string]any); ok {
+				// $dataフィールドが存在するか確認
+				if dateValue, hasDate := value["$date"]; hasDate {
+					// $dateフィールドが存在する場合は、string型に変換
+					var dateStr string
+					switch v := dateValue.(type) {
+					case string:
+						dateStr = v
+					case float64:
+						dateStr = fmt.Sprintf("%d", int(v))
+					default:
+						dateStr = fmt.Sprintf("%v", v)
 					}
+					documents[i][key] = dateStr
 				}
 			}
 		}
 	}
+
 	return documents
 }
