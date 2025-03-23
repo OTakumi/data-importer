@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"sync"
 	"time"
 
@@ -186,37 +187,84 @@ func (m *MongoImporter) cleanDocuments(documents []domain.Document) []domain.Doc
 			idCount++
 
 			// _idの種類も確認
-			fmt.Printf("Document %d has _id of type %T: %v\n",
-				i, documents[i]["_id"], documents[i]["_id"])
+			// fmt.Printf("Document %d has _id of type %T: %v\n",
+			// 	i, documents[i]["_id"], documents[i]["_id"])
 
 			delete(documents[i], "_id")
 
 			// 削除後に確認
-			if _, stillHasID := documents[i]["_id"]; stillHasID {
-				fmt.Printf("WARNING: Document %d still has _id after deletion!\n", i)
-			}
+			// if _, stillHasID := documents[i]["_id"]; stillHasID {
+			// 	fmt.Printf("WARNING: Document %d still has _id after deletion!\n", i)
+			// }
 		}
 
-		// Convert to string from date type
-		for key, value := range documents[i] {
-			if value, ok := value.(map[string]any); ok {
-				// $dataフィールドが存在するか確認
-				if dateValue, hasDate := value["$date"]; hasDate {
-					// $dateフィールドが存在する場合は、string型に変換
-					var dateStr string
-					switch v := dateValue.(type) {
-					case string:
-						dateStr = v
-					case float64:
-						dateStr = fmt.Sprintf("%d", int(v))
-					default:
-						dateStr = fmt.Sprintf("%v", v)
+		// 各フィールドを再帰的に処理して日付を変換
+		documents[i] = m.processDocumentDates(documents[i])
+	}
+
+	return documents
+}
+
+// processDocumentDates recursively processes all fields in a document
+// converting date strings and MongoDB's $date format to time.Time objects
+func (m *MongoImporter) processDocumentDates(doc domain.Document) domain.Document {
+	for key, value := range doc {
+		switch v := value.(type) {
+		case map[string]interface{}:
+			// $dateフィールドを持つオブジェクトをチェック
+			if dateStr, ok := v["$date"]; ok {
+				if ds, ok := dateStr.(string); ok {
+					// 日付文字列をtime.Time型に変換
+					t, err := parseDateTime(ds)
+					if err == nil {
+						// time.Time型をセット (MongoDB ドライバーが自動的に日付型として扱う)
+						doc[key] = t
+					} else {
+						fmt.Printf("Warning: Failed to parse date string '%s': %v\n", ds, err)
 					}
-					documents[i][key] = dateStr
+				}
+			} else {
+				// ネストされたマップを再帰的に処理
+				doc[key] = m.processDocumentDates(v)
+			}
+		case string:
+			// 文字列が日付形式かチェック
+			if isDateString(v) {
+				t, err := parseDateTime(v)
+				if err == nil {
+					doc[key] = t
 				}
 			}
 		}
 	}
+	return doc
+}
 
-	return documents
+// parseDateTime parses a date string in various formats
+func parseDateTime(dateStr string) (time.Time, error) {
+	formats := []string{
+		time.RFC3339,
+		time.RFC3339Nano,
+		"2006-01-02T15:04:05.000Z",
+		"2006-01-02",
+	}
+
+	for _, format := range formats {
+		t, err := time.Parse(format, dateStr)
+		if err == nil {
+			return t, nil
+		}
+	}
+
+	return time.Time{}, fmt.Errorf("unable to parse date: %s", dateStr)
+}
+
+// isDateString checks if a string is in ISO date format
+func isDateString(s string) bool {
+	// ISO 8601形式の日付文字列をチェック
+	matched, _ := regexp.MatchString(
+		`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$`,
+		s)
+
+	return matched
 }

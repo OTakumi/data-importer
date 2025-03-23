@@ -5,9 +5,9 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/OTakumi/data-importer/internal/domain"
-	// "github.com/OTakumi/data-importer/internal/utils"
 )
 
 // MockFileUtils is a mock implementation of the file utilities for testing
@@ -571,11 +571,22 @@ func TestProcessBatches(t *testing.T) {
 }
 
 // TestCleanDocuments tests the cleanDocuments function
+// TestCleanDocuments tests the cleanDocuments function
 func TestCleanDocuments(t *testing.T) {
 	// Create a basic importer instance for testing
 	importer := &MongoImporter{
 		removeIDField: true,
 	}
+
+	// パースに使う基準時間
+	dateStr1 := "2024-05-22T16:04:35.000Z"
+	timeObj1, _ := time.Parse(time.RFC3339, dateStr1)
+
+	dateStr2 := "2024-05-23T10:15:20.000Z"
+	timeObj2, _ := time.Parse(time.RFC3339, dateStr2)
+
+	dateStr3 := "2014-02-19T14:24:08.000Z"
+	timeObj3, _ := time.Parse(time.RFC3339, dateStr3)
 
 	// Test cases
 	tests := []struct {
@@ -611,7 +622,7 @@ func TestCleanDocuments(t *testing.T) {
 			removeIDField: true,
 		},
 		{
-			name: "Date Conversion: Convert $date fields",
+			name: "Date Fields: Convert $date fields to time.Time",
 			input: []domain.Document{
 				{
 					"_id":        map[string]any{"$oid": "67aea3a5369bca5b08f38a67"},
@@ -623,8 +634,8 @@ func TestCleanDocuments(t *testing.T) {
 			expected: []domain.Document{
 				{
 					"name":       "Document with dates",
-					"created_at": "2024-05-22T16:04:35.000Z",
-					"updated_at": "2024-05-23T10:15:20.000Z",
+					"created_at": timeObj1,
+					"updated_at": timeObj2,
 				},
 			},
 			removeIDField: true,
@@ -668,8 +679,8 @@ func TestCleanDocuments(t *testing.T) {
 					"business_form_type": "CORPORATION",
 					"tel":                "080-9966-0373",
 					"zip":                "1530064",
-					"created_at":         "2014-02-19T14:24:08.000Z",
-					"updated_at":         "2024-05-22T16:04:35.000Z",
+					"created_at":         timeObj3,
+					"updated_at":         timeObj1,
 					"division_type":      nil,
 					"buyer_team_id":      4,
 				},
@@ -711,7 +722,12 @@ func TestCleanDocuments(t *testing.T) {
 
 			// Check results
 			if !reflect.DeepEqual(result, tt.expected) {
-				t.Errorf("Expected %+v, got %+v", tt.expected, result)
+				t.Errorf("Expected\n%+v\ngot\n%+v", tt.expected, result)
+
+				// 実際の型情報を表示して確認
+				for k, v := range result[0] {
+					t.Logf("Field %s: Type %T, Value %v", k, v, v)
+				}
 			}
 		})
 	}
