@@ -186,35 +186,15 @@ func (m *MongoImporter) cleanDocuments(documents []domain.Document) []domain.Doc
 			idCount++
 
 			// _idの種類も確認
-			fmt.Printf("Document %d has _id of type %T: %v\n",
-				i, documents[i]["_id"], documents[i]["_id"])
+			// fmt.Printf("Document %d has _id of type %T: %v\n",
+			// 	i, documents[i]["_id"], documents[i]["_id"])
 
 			delete(documents[i], "_id")
 
 			// 削除後に確認
-			if _, stillHasID := documents[i]["_id"]; stillHasID {
-				fmt.Printf("WARNING: Document %d still has _id after deletion!\n", i)
-			}
-		}
-
-		// Convert to string from date type
-		for key, value := range documents[i] {
-			if value, ok := value.(map[string]any); ok {
-				// $dataフィールドが存在するか確認
-				if dateValue, hasDate := value["$date"]; hasDate {
-					// $dateフィールドが存在する場合は、string型に変換
-					var dateStr string
-					switch v := dateValue.(type) {
-					case string:
-						dateStr = v
-					case float64:
-						dateStr = fmt.Sprintf("%d", int(v))
-					default:
-						dateStr = fmt.Sprintf("%v", v)
-					}
-					documents[i][key] = dateStr
-				}
-			}
+			// if _, stillHasID := documents[i]["_id"]; stillHasID {
+			// 	fmt.Printf("WARNING: Document %d still has _id after deletion!\n", i)
+			// }
 		}
 	}
 

@@ -611,7 +611,7 @@ func TestCleanDocuments(t *testing.T) {
 			removeIDField: true,
 		},
 		{
-			name: "Date Conversion: Convert $date fields",
+			name: "Date Fields: Preserve $date fields",
 			input: []domain.Document{
 				{
 					"_id":        map[string]any{"$oid": "67aea3a5369bca5b08f38a67"},
@@ -623,8 +623,8 @@ func TestCleanDocuments(t *testing.T) {
 			expected: []domain.Document{
 				{
 					"name":       "Document with dates",
-					"created_at": "2024-05-22T16:04:35.000Z",
-					"updated_at": "2024-05-23T10:15:20.000Z",
+					"created_at": map[string]any{"$date": "2024-05-22T16:04:35.000Z"},
+					"updated_at": map[string]any{"$date": "2024-05-23T10:15:20.000Z"},
 				},
 			},
 			removeIDField: true,
@@ -668,8 +668,8 @@ func TestCleanDocuments(t *testing.T) {
 					"business_form_type": "CORPORATION",
 					"tel":                "080-9966-0373",
 					"zip":                "1530064",
-					"created_at":         "2014-02-19T14:24:08.000Z",
-					"updated_at":         "2024-05-22T16:04:35.000Z",
+					"created_at":         map[string]any{"$date": "2014-02-19T14:24:08.000Z"},
+					"updated_at":         map[string]any{"$date": "2024-05-22T16:04:35.000Z"},
 					"division_type":      nil,
 					"buyer_team_id":      4,
 				},
